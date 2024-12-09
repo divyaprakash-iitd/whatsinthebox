@@ -35,6 +35,7 @@ Description
 #include "indexedOctree.H"
 #include "treeDataCell.H"
 #include "volFields.H"
+#include "cellSet.H"
 
 using namespace Foam;
 
@@ -42,18 +43,11 @@ int main(int argc, char *argv[])
 {
     #include "setRootCase.H"
     
-    // Define the bounding box
-    scalar minX = 0.025;
-    scalar minY = 0.025;
-    scalar minZ = 0.0;
-    scalar maxX = 0.075;
-    scalar maxY = 0.075;
-    scalar maxZ = 0.01;
-
-    treeBoundBox searchBox(point(minX, minY, minZ), point(maxX, maxY, maxZ));
-    
     // Create time object
     Time runTime(Time::controlDictName, args);
+    
+    // Set the time to 1 for better ParaView compatibility
+    runTime.setTime(1, 1);
     
     // Load mesh
     fvMesh mesh
@@ -67,7 +61,24 @@ int main(int argc, char *argv[])
         )
     );
 
-    // Create visualization field
+    // Define the bounding box
+    scalar minX = 0.025;
+    scalar minY = 0.025;
+    scalar minZ = 0.0;
+    scalar maxX = 0.075;
+    scalar maxY = 0.075;
+    scalar maxZ = 0.01;
+
+    treeBoundBox searchBox(point(minX, minY, minZ), point(maxX, maxY, maxZ));
+
+    // Access the octree from the mesh
+    const indexedOctree<treeDataCell>& cellTree = mesh.cellTree();
+
+    // Query the cells in the bounding box
+    labelHashSet foundCells;
+    label count = cellTree.findBox(searchBox, foundCells);
+
+    // Method 1: Create and write volScalarField
     volScalarField selectedCells
     (
         IOobject
@@ -79,35 +90,34 @@ int main(int argc, char *argv[])
             IOobject::AUTO_WRITE
         ),
         mesh,
-        dimensionedScalar("zero", dimless, 0.0)  // Initialize all cells to 0
+        dimensionedScalar("zero", dimless, 0.0)
     );
 
-    // Access the octree from the mesh
-    const indexedOctree<treeDataCell>& cellTree = mesh.cellTree();
-
-    // Query the cells in the bounding box
-    labelHashSet foundCells;
-    label count = cellTree.findBox(searchBox, foundCells);
-
-    // Mark selected cells with value 1
+    // Mark selected cells
     forAllConstIter(labelHashSet, foundCells, iter)
     {
         selectedCells[*iter] = 1.0;
     }
 
-    // Print results
-    Info << "Bounding box: [" << minX << ", " << minY << ", " << minZ
-         << "] to [" << maxX << ", " << maxY << ", " << maxZ << "]" << nl;
-    Info << "Number of cells found in bounding box: " << count << nl;
-    Info << "Cells found:" << nl;
-    forAllConstIter(labelHashSet, foundCells, iter)
-    {
-        Info << *iter << nl;
-    }
-
     // Write the field
     Info<< "Writing selectedCells field to " << runTime.timeName() << endl;
     selectedCells.write();
+
+    // Method 2: Create and write cellSet
+    cellSet selectedCellSet
+    (
+        mesh,
+        "selectedBox",  // name of the cellSet
+        foundCells    // directly use our found cells
+    );
+
+    Info<< "Writing cellSet to constant/polyMesh/sets/selectedBox" << endl;
+    selectedCellSet.write();
+
+    // Print results
+    Info<< "Bounding box: [" << minX << ", " << minY << ", " << minZ
+        << "] to [" << maxX << ", " << maxY << ", " << maxZ << "]" << nl
+        << "Number of cells found in bounding box: " << count << nl;
 
     return 0;
 }
