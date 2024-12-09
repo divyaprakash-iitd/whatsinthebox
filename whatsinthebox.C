@@ -34,14 +34,15 @@ Description
 #include "fvMesh.H"
 #include "indexedOctree.H"
 #include "treeDataCell.H"
+#include "volFields.H"
 
 using namespace Foam;
 
 int main(int argc, char *argv[])
 {
-    #include "setRootCase.H"  // This will create 'args' for us
+    #include "setRootCase.H"
     
-    // Define the bounding box directly in the code
+    // Define the bounding box
     scalar minX = 0.025;
     scalar minY = 0.025;
     scalar minZ = 0.0;
@@ -54,36 +55,59 @@ int main(int argc, char *argv[])
     // Create time object
     Time runTime(Time::controlDictName, args);
     
-    // Load mesh explicitly from constant/polyMesh
+    // Load mesh
     fvMesh mesh
     (
         IOobject
         (
             fvMesh::defaultRegion,
-            runTime.constant(),  // This ensures we look in the constant directory
+            runTime.constant(),
             runTime,
             IOobject::MUST_READ
         )
     );
 
-    // Access the octree from the mesh using cellTree()
+    // Create visualization field
+    volScalarField selectedCells
+    (
+        IOobject
+        (
+            "selectedCells",
+            runTime.timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        mesh,
+        dimensionedScalar("zero", dimless, 0.0)  // Initialize all cells to 0
+    );
+
+    // Access the octree from the mesh
     const indexedOctree<treeDataCell>& cellTree = mesh.cellTree();
 
     // Query the cells in the bounding box
     labelHashSet foundCells;
     label count = cellTree.findBox(searchBox, foundCells);
 
-    // Print the results
+    // Mark selected cells with value 1
+    forAllConstIter(labelHashSet, foundCells, iter)
+    {
+        selectedCells[*iter] = 1.0;
+    }
+
+    // Print results
     Info << "Bounding box: [" << minX << ", " << minY << ", " << minZ
          << "] to [" << maxX << ", " << maxY << ", " << maxZ << "]" << nl;
-
     Info << "Number of cells found in bounding box: " << count << nl;
     Info << "Cells found:" << nl;
-
     forAllConstIter(labelHashSet, foundCells, iter)
     {
         Info << *iter << nl;
     }
+
+    // Write the field
+    Info<< "Writing selectedCells field to " << runTime.timeName() << endl;
+    selectedCells.write();
 
     return 0;
 }
