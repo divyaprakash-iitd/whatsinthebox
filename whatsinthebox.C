@@ -29,11 +29,7 @@ Application
 Description
 
 \*---------------------------------------------------------------------------*/
-
 #include "fvCFD.H"
-
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
 #include "argList.H"
 #include "fvMesh.H"
 #include "indexedOctree.H"
@@ -43,22 +39,32 @@ using namespace Foam;
 
 int main(int argc, char *argv[])
 {
-    // Parse command-line arguments (for case directory)
-    argList args(argc, argv);
-
+    #include "setRootCase.H"  // This will create 'args' for us
+    
     // Define the bounding box directly in the code
-    scalar minX = 0.1;
-    scalar minY = 0.1;
-    scalar minZ = 0.1;
-    scalar maxX = 0.3;
-    scalar maxY = 0.3;
-    scalar maxZ = 0.3;
+    scalar minX = 0.025;
+    scalar minY = 0.025;
+    scalar minZ = 0.0;
+    scalar maxX = 0.075;
+    scalar maxY = 0.075;
+    scalar maxZ = 0.01;
 
     treeBoundBox searchBox(point(minX, minY, minZ), point(maxX, maxY, maxZ));
-
-    // Load the mesh from the case directory
-    Foam::Time runTime(Foam::Time::controlDictName, args.rootPath(), args.caseName());
-    fvMesh mesh(runTime);
+    
+    // Create time object
+    Time runTime(Time::controlDictName, args);
+    
+    // Load mesh explicitly from constant/polyMesh
+    fvMesh mesh
+    (
+        IOobject
+        (
+            fvMesh::defaultRegion,
+            runTime.constant(),  // This ensures we look in the constant directory
+            runTime,
+            IOobject::MUST_READ
+        )
+    );
 
     // Access the octree from the mesh using cellTree()
     const indexedOctree<treeDataCell>& cellTree = mesh.cellTree();
